@@ -481,8 +481,8 @@ function App() {
   return (
     <div className="App">
       <header className="app-header">
-        <h1>🚀 CLOB Trading System</h1>
-        <p>Central Limit Order Book for Binary Markets</p>
+        <h1>Mini-etf</h1>
+        <p>Central Limit Order Book for Binary Markets of ETFs</p>
       </header>
       
       {/* Safety Banner */}
@@ -496,10 +496,6 @@ function App() {
       </div>
 
       <div className="container">
-        <div className="header">
-          <h1>CLOB Trading Interface</h1>
-        </div>
-
         {/* Wallet Section */}
         <div className="wallet-section">
           <h2>🔐 Wallet Connection</h2>
@@ -676,35 +672,6 @@ function App() {
                   </span></span>
                 </div>
                 
-                {/* Bids (Buy Orders) */}
-                <div className="order-section">
-                  <h5>Bids (Buy Orders)</h5>
-                  {orderBookData.bids.map((bid, index) => (
-                    <div key={`bid-${index}`} className="order-row bid">
-                      <span>Buy {bid.totalQty} @ {bid.price.toFixed(3)}</span>
-                    </div>
-                  ))}
-                  {orderBookData.bids.length === 0 && (
-                    <p style={{textAlign: 'center', color: '#888', fontStyle: 'italic'}}>
-                      No bids in this market
-                    </p>
-                  )}
-                </div>
-
-                {/* Asks (Sell Orders) */}
-                <div className="order-section">
-                  <h5>Asks (Sell Orders)</h5>
-                  {orderBookData.asks.map((ask, index) => (
-                    <div key={`ask-${index}`} className="order-row ask">
-                      <span>Sell {ask.totalQty} @ {ask.price.toFixed(3)}</span>
-                    </div>
-                  ))}
-                  {orderBookData.asks.length === 0 && (
-                    <p style={{textAlign: 'center', color: '#888', fontStyle: 'italic'}}>
-                      No asks in this market
-                    </p>
-                  )}
-                </div>
 
                 {/* User's Orders */}
                 <div className="order-section">
