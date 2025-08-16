@@ -76,6 +76,4 @@ contract EtfFeedAggregator {
         function _toBytes32(string memory s) internal pure returns (bytes32) {
             return keccak256(bytes(s));
         }
-
-
 }
