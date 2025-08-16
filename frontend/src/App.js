@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { CONFIG, isTestnet, getNetworkInfo, isNetworkAllowed } from './config';
+import ChainlinkFeeds from './ChainlinkFeeds';
 import './App.css';
 
 function App() {
@@ -15,13 +16,16 @@ function App() {
   const [availableWallets, setAvailableWallets] = useState([]);
   const [currentNetwork, setCurrentNetwork] = useState(null);
   const [orderBookData, setOrderBookData] = useState({ bids: [], asks: [] });
+  const [createdMarkets, setCreatedMarkets] = useState([]); // Store created prediction markets
+  const [selectedMarketId, setSelectedMarketId] = useState(null); // Currently selected market
   const [orderForm, setOrderForm] = useState({
     market: 'YES',
     side: 'Buy',
     price: '',
     quantity: '',
-    marketId: 'default_market'
+    marketId: null // Will be set to selected prediction market ID
   });
+  const [currentPage, setCurrentPage] = useState('trading'); // 'trading' or 'feeds'
 
   // Detect available wallets on component mount
   useEffect(() => {
@@ -30,6 +34,8 @@ function App() {
     if (orderForm.marketId) {
       refreshOrderBook();
     }
+    // Load created prediction markets from localStorage
+    loadCreatedMarkets();
   }, []);
 
   // Load order book data when active market changes
@@ -60,6 +66,85 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [isConnected, account]);
+
+  // Debug effect to log state changes
+  useEffect(() => {
+    console.log('=== CLOB STATE UPDATE ===');
+    console.log('createdMarkets:', createdMarkets);
+    console.log('selectedMarketId:', selectedMarketId);
+    console.log('currentPage:', currentPage);
+    console.log('=======================');
+  }, [createdMarkets, selectedMarketId, currentPage]);
+
+  // Debug effect to monitor order book data changes
+  useEffect(() => {
+    console.log('=== ORDER BOOK STATE CHANGE ===');
+    console.log('orderBookData:', orderBookData);
+    console.log('bids count:', orderBookData.bids?.length);
+    console.log('asks count:', orderBookData.asks?.length);
+    console.log('bids data:', orderBookData.bids);
+    console.log('asks data:', orderBookData.asks);
+    console.log('==============================');
+  }, [orderBookData]);
+
+  // Function to load created prediction markets from localStorage
+  const loadCreatedMarkets = () => {
+    try {
+      const stored = localStorage.getItem('createdMarkets');
+      console.log('Raw localStorage data:', stored);
+      
+      if (stored) {
+        const markets = JSON.parse(stored);
+        console.log('Parsed markets:', markets);
+        console.log('Markets array length:', markets.length);
+        
+        setCreatedMarkets(markets);
+        
+        // If we have markets and none selected, select the first one
+        if (markets.length > 0 && !selectedMarketId) {
+          console.log('Setting first market as selected:', markets[0]);
+          setSelectedMarketId(markets[0].id);
+          
+          // Also set the order form market ID
+          setOrderForm(prev => ({
+            ...prev,
+            marketId: markets[0].id.toString()
+          }));
+        }
+      } else {
+        console.log('No markets found in localStorage');
+        setCreatedMarkets([]);
+      }
+    } catch (error) {
+      console.error('Error loading created markets:', error);
+      setCreatedMarkets([]);
+    }
+  };
+
+  // Function to handle market selection
+  const handleMarketSelection = (marketId) => {
+    setSelectedMarketId(marketId);
+    const selectedMarket = createdMarkets.find(m => m.id === marketId);
+    if (selectedMarket) {
+      console.log('Selected market:', selectedMarket);
+      
+      // Update order form with the selected market ID
+      setOrderForm(prev => ({
+        ...prev,
+        marketId: marketId.toString()
+      }));
+      
+      console.log('Updated order form:', orderForm);
+      
+      // Refresh order book for the new market
+      refreshOrderBook();
+    }
+  };
+
+  // Function to get currently selected market
+  const getSelectedMarket = () => {
+    return createdMarkets.find(m => m.id === selectedMarketId);
+  };
 
   // Function to detect which wallets are available
   const detectAvailableWallets = () => {
@@ -263,8 +348,19 @@ function App() {
   const placeOrder = async (e) => {
     e.preventDefault();
     
+    console.log('=== PLACING ORDER ===');
+    console.log('Order form data:', orderForm);
+    console.log('Selected market ID:', selectedMarketId);
+    console.log('Active market:', activeMarket);
+    console.log('=====================');
+    
     if (!isConnected) {
       alert('Please connect your wallet first');
+      return;
+    }
+
+    if (!orderForm.marketId) {
+      alert('Please select a prediction market first');
       return;
     }
 
@@ -326,14 +422,12 @@ function App() {
           setOrders(prev => prev.filter(o => o.id !== order.id));
         }
 
-        // Reset form
-        setOrderForm({
-          market: activeMarket,
-          side: 'Buy',
+        // Reset form but keep the current market ID
+        setOrderForm(prev => ({
+          ...prev,
           price: '',
-          quantity: '',
-          marketId: 'default_market'
-        });
+          quantity: ''
+        }));
 
         alert('Order placed successfully!');
         
@@ -395,15 +489,41 @@ function App() {
   const refreshOrderBook = async () => {
     try {
       console.log('Refreshing order book for market:', activeMarket);
+      console.log('Using marketId:', orderForm.marketId);
+      console.log('Selected prediction market ID:', selectedMarketId);
+      
+      if (!orderForm.marketId) {
+        console.log('No market ID set, skipping order book refresh');
+        return;
+      }
+      
       const response = await fetch(`http://localhost:3001/api/markets/${orderForm.marketId}/orderbook?market=${activeMarket}`);
       if (response.ok) {
         const orderBookData = await response.json();
         console.log('Received order book data:', orderBookData);
-        setOrderBookData({
+        console.log('Raw bids:', orderBookData.bids);
+        console.log('Raw asks:', orderBookData.asks);
+        console.log('Bids type:', typeof orderBookData.bids, 'Length:', orderBookData.bids?.length);
+        console.log('Asks type:', typeof orderBookData.asks, 'Length:', orderBookData.asks?.length);
+        
+        const processedData = {
           bids: orderBookData.bids || [],
           asks: orderBookData.asks || []
-        });
+        };
+        
+        console.log('Processed order book data:', processedData);
+        console.log('Processed bids type:', typeof processedData.bids, 'Length:', processedData.bids.length);
+        console.log('Processed asks type:', typeof processedData.asks, 'Length:', processedData.asks.length);
+        console.log('Processed bids content:', JSON.stringify(processedData.bids));
+        console.log('Processed asks content:', JSON.stringify(processedData.asks));
+        
+        setOrderBookData(processedData);
         console.log('Order book state updated');
+        
+        // Verify the state was set correctly
+        setTimeout(() => {
+          console.log('Order book state after update:', orderBookData);
+        }, 100);
       } else {
         console.error('Failed to fetch order book:', response.status, response.statusText);
       }
@@ -495,6 +615,22 @@ function App() {
         </div>
       </div>
 
+      {/* Navigation */}
+      <div className="navigation">
+        <button 
+          className={`nav-button ${currentPage === 'trading' ? 'active' : ''}`}
+          onClick={() => setCurrentPage('trading')}
+        >
+          📊 Trading
+        </button>
+        <button 
+          className={`nav-button ${currentPage === 'feeds' ? 'active' : ''}`}
+          onClick={() => setCurrentPage('feeds')}
+        >
+          🔗 Chainlink Feeds
+        </button>
+      </div>
+
       <div className="container">
         {/* Wallet Section */}
         <div className="wallet-section">
@@ -580,158 +716,282 @@ function App() {
           )}
         </div>
 
-        {/* Market Selection Tabs */}
-        <div className="market-tabs">
-          <button 
-            className={`market-tab ${activeMarket === 'YES' ? 'active' : ''}`}
-            onClick={() => handleMarketChange('YES')}
-          >
-            YES Market
-          </button>
-          <button 
-            className={`market-tab ${activeMarket === 'NO' ? 'active' : ''}`}
-            onClick={() => handleMarketChange('NO')}
-          >
-            NO Market
-          </button>
-        </div>
-
-        {/* Trading Section - Single Market */}
-        <div className="trading-section-single">
-          <div className="market-card">
-            <h3>{activeMarket} Market</h3>
-            <form className="order-form" onSubmit={placeOrder}>
-              <input type="hidden" name="market" value={activeMarket} />
-              
-              <div className="form-group">
-                <label>Side:</label>
-                <select name="side" value={orderForm.side} onChange={handleInputChange}>
-                  <option value="Buy">Buy</option>
-                  <option value="Sell">Sell</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Price (0.0 - 1.0):</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={orderForm.price}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  max="1"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Quantity (whole shares):</label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={orderForm.quantity}
-                  onChange={handleInputChange}
-                  step="1"
-                  min="1"
-                  required
-                />
-              </div>
-
-              <button type="submit" className="submit-button" disabled={!isConnected}>
-                Place Order
-              </button>
-            </form>
-
-            {/* Order Book for Active Market */}
-            <div className="order-book">
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                <h4>Order Book</h4>
-                <button 
-                  onClick={refreshOrderBook}
-                  style={{
-                    background: '#2196F3', 
-                    color: 'white', 
-                    border: 'none', 
-                    padding: '8px 16px', 
-                    borderRadius: '4px', 
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  🔄 Refresh
-                </button>
-              </div>
-              <div>
-                <div className="order-row">
-                  <span>Best Bid: <span className="bid">
-                    {orderBookData.bids.length > 0 ? orderBookData.bids[0].price.toFixed(3) : '0.000'}
-                  </span></span>
-                  <span>Best Ask: <span className="ask">
-                    {orderBookData.asks.length > 0 ? orderBookData.asks[0].price.toFixed(3) : '1.000'}
-                  </span></span>
-                </div>
-                
-
-                {/* User's Orders */}
-                <div className="order-section">
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <h5>Your Orders</h5>
+        {currentPage === 'trading' ? (
+          <>
+            {/* Prediction Market Selector */}
+            {createdMarkets.length > 0 ? (
+              <div className="prediction-market-selector">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3>🎯 Select Prediction Market</h3>
+                  <div style={{ display: 'flex', gap: '10px' }}>
                     <button 
-                      onClick={loadUserOrders}
+                      onClick={loadCreatedMarkets}
                       style={{
-                        background: '#4CAF50', 
-                        color: 'white', 
-                        border: 'none', 
-                        padding: '4px 8px', 
-                        borderRadius: '4px', 
+                        background: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: '4px',
                         cursor: 'pointer',
-                        fontSize: '10px'
+                        fontSize: '12px'
                       }}
                     >
-                      🔄
+                      🔄 Refresh Markets
+                    </button>
+                    <button 
+                      onClick={() => {
+                        console.log('=== MANUAL CHECK ===');
+                        console.log('localStorage createdMarkets:', localStorage.getItem('createdMarkets'));
+                        console.log('State createdMarkets:', createdMarkets);
+                        console.log('State selectedMarketId:', selectedMarketId);
+                        alert('Check console for market data');
+                      }}
+                      style={{
+                        background: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🔍 Check Data
                     </button>
                   </div>
-                  {orders.filter(o => o.market === activeMarket).slice(0, 5).map(order => (
-                    <div key={order.id} className="order-row">
-                      <span className={order.side === 'Buy' ? 'bid' : 'ask'}>
-                        {order.side} {order.qty} @ {order.price.toFixed(3)}
-                      </span>
-                      <button 
-                        onClick={() => cancelOrder(order.id)}
-                        style={{background: '#f44336', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'}}
-                      >
-                        Cancel
-                      </button>
+                </div>
+                
+                {/* Debug Info */}
+                <div style={{ background: '#f8f9fa', padding: '10px', borderRadius: '4px', marginBottom: '15px', fontSize: '12px' }}>
+                  <strong>Debug:</strong> {createdMarkets.length} markets loaded | Selected: {selectedMarketId || 'None'}
+                </div>
+                
+                <div className="market-options">
+                  {createdMarkets.map(market => (
+                    <div 
+                      key={market.id} 
+                      className={`market-option ${selectedMarketId === market.id ? 'selected' : ''}`}
+                      onClick={() => handleMarketSelection(market.id)}
+                    >
+                      <div className="market-header">
+                        <span className="market-symbols">{market.symbols.join(', ')}</span>
+                        <span className="market-status">{market.isMock ? '🔄 Mock' : '✅ Live'}</span>
+                      </div>
+                      <div className="market-details">
+                        <span className="strike-price">Strike: ${Number(ethers.formatUnits(market.strike, 18)).toFixed(4)}</span>
+                        <span className="price-band">Band: ${Number(ethers.formatUnits(market.lower, 18)).toFixed(4)} - ${Number(ethers.formatUnits(market.upper, 18)).toFixed(4)}</span>
+                        <span className="settlement">Settle: {new Date(market.settleTs * 1000).toLocaleDateString()}</span>
+                      </div>
                     </div>
                   ))}
-                  {orders.filter(o => o.market === activeMarket).length === 0 && (
-                    <p style={{textAlign: 'center', color: '#888', fontStyle: 'italic'}}>
-                      No orders in this market yet
-                    </p>
-                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="no-markets-message">
+                <h3>🎯 No Prediction Markets Available</h3>
+                <p>Create prediction markets on the Chainlink Feeds page to start trading!</p>
+                <button 
+                  className="nav-button"
+                  onClick={() => setCurrentPage('feeds')}
+                  style={{ marginTop: '10px' }}
+                >
+                  🔗 Go to Chainlink Feeds
+                </button>
+              </div>
+            )}
+
+            {/* Market Selection Tabs */}
+            <div className="market-tabs">
+              <button 
+                className={`market-tab ${activeMarket === 'YES' ? 'active' : ''}`}
+                onClick={() => handleMarketChange('YES')}
+              >
+                YES Market
+              </button>
+              <button 
+                className={`market-tab ${activeMarket === 'NO' ? 'active' : ''}`}
+                onClick={() => handleMarketChange('NO')}
+              >
+                NO Market
+              </button>
+            </div>
+
+            {/* Trading Section - Single Market */}
+            <div className="trading-section-single">
+              {/* Selected Market Info */}
+              {selectedMarketId && getSelectedMarket() && (
+                <div className="selected-market-info">
+                  <h4>📊 Trading: {getSelectedMarket().symbols.join(', ')}</h4>
+                  <div className="market-trading-details">
+                    <span>Strike: ${Number(ethers.formatUnits(getSelectedMarket().strike, 18)).toFixed(4)}</span>
+                    <span>Band: ${Number(ethers.formatUnits(getSelectedMarket().lower, 18)).toFixed(4)} - ${Number(ethers.formatUnits(getSelectedMarket().upper, 18)).toFixed(4)}</span>
+                    <span>Settle: {new Date(getSelectedMarket().settleTs * 1000).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="market-card">
+                <h3>{activeMarket} Market</h3>
+                {orderForm.marketId && (
+                  <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                    Trading on Market ID: {orderForm.marketId}
+                  </div>
+                )}
+                
+                {/* Debug: Show current order form state */}
+                <div style={{ background: '#f0f0f0', padding: '8px', borderRadius: '4px', marginBottom: '15px', fontSize: '11px' }}>
+                  <strong>Form Debug:</strong> marketId={orderForm.marketId || 'null'} | 
+                  side={orderForm.side || 'null'} | 
+                  price={orderForm.price || 'null'} | 
+                  quantity={orderForm.quantity || 'null'}
+                </div>
+                <form className="order-form" onSubmit={placeOrder}>
+                  <input type="hidden" name="market" value={activeMarket} />
+                  
+                  <div className="form-group">
+                    <label>Side:</label>
+                    <select name="side" value={orderForm.side} onChange={handleInputChange}>
+                      <option value="Buy">Buy</option>
+                      <option value="Sell">Sell</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Price (0.0 - 1.0):</label>
+                    <input
+                      type="number"
+                      name="price"
+                      value={orderForm.price}
+                      onChange={handleInputChange}
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Quantity (whole shares):</label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={orderForm.quantity}
+                      onChange={handleInputChange}
+                      step="1"
+                      min="1"
+                      required
+                    />
+                  </div>
+
+                  <button type="submit" className="submit-button" disabled={!isConnected}>
+                    Place Order
+                  </button>
+                </form>
+
+                {/* Order Book for Active Market */}
+                <div className="order-book">
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <h4>Order Book</h4>
+                    <button 
+                      onClick={refreshOrderBook}
+                      style={{
+                        background: '#2196F3', 
+                        color: 'white', 
+                        border: 'none', 
+                        padding: '8px 16px', 
+                        borderRadius: '4px', 
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🔄 Refresh
+                    </button>
+                  </div>
+                  <div>
+                    {/* Debug: Show raw order book data */}
+                    <div style={{ background: '#f8f9fa', padding: '8px', borderRadius: '4px', marginBottom: '10px', fontSize: '11px' }}>
+                      <strong>Order Book Debug:</strong> Bids: {orderBookData.bids.length} | Asks: {orderBookData.asks.length}
+                    </div>
+                    
+                    <div className="order-row">
+                      <span>Best Bid: <span className="bid">
+                        {orderBookData.bids.length > 0 ? orderBookData.bids[0].price.toFixed(3) : '0.000'}
+                      </span></span>
+                      <span>Best Ask: <span className="ask">
+                        {orderBookData.asks.length > 0 ? orderBookData.asks[0].price.toFixed(3) : '1.000'}
+                      </span></span>
+                    </div>
+                    
+
+                    {/* User's Orders */}
+                    <div className="order-section">
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <h5>Your Orders</h5>
+                        <button 
+                          onClick={loadUserOrders}
+                          style={{
+                            background: '#4CAF50', 
+                            color: 'white', 
+                            border: 'none', 
+                            padding: '4px 8px', 
+                            borderRadius: '4px', 
+                            cursor: 'pointer',
+                            fontSize: '10px'
+                          }}
+                        >
+                          🔄
+                        </button>
+                      </div>
+                      {orders.filter(o => o.market === activeMarket).slice(0, 5).map(order => (
+                        <div key={order.id} className="order-row">
+                          <span className={order.side === 'Buy' ? 'bid' : 'ask'}>
+                            {order.side} {order.qty} @ {order.price.toFixed(3)}
+                          </span>
+                          <button 
+                            onClick={() => cancelOrder(order.id)}
+                            style={{background: '#f44336', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'}}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ))}
+                      {orders.filter(o => o.market === activeMarket).length === 0 && (
+                        <p style={{textAlign: 'center', color: '#888', fontStyle: 'italic'}}>
+                          No orders in this market yet
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Recent Trades */}
-        <div className="trades-section">
-          <h3>Recent Trades</h3>
-          {trades.length === 0 ? (
-            <p>No trades yet</p>
-          ) : (
-            trades.slice(0, 10).map(trade => (
-              <div key={trade.id} className="trade-row">
-                <span>{trade.market}</span>
-                <span>{trade.buyer.slice(0, 6)}...{trade.buyer.slice(-4)} → {trade.seller.slice(0, 6)}...{trade.seller.slice(-4)}</span>
-                <span>{trade.qty} @ {trade.price.toFixed(3)}</span>
-                <span>{new Date(trade.timestamp * 1000).toLocaleTimeString()}</span>
-              </div>
-            ))
-          )}
-        </div>
+            {/* Recent Trades */}
+            <div className="trades-section">
+              <h3>Recent Trades</h3>
+              {trades.length === 0 ? (
+                <p>No trades yet</p>
+              ) : (
+                trades.slice(0, 10).map(trade => (
+                  <div key={trade.id} className="trade-row">
+                    <span>{trade.market}</span>
+                    <span>{trade.buyer.slice(0, 6)}...{trade.buyer.slice(-4)} → {trade.seller.slice(0, 6)}...{trade.seller.slice(-4)}</span>
+                    <span>{trade.qty} @ {trade.price.toFixed(3)}</span>
+                    <span>{new Date(trade.timestamp * 1000).toLocaleTimeString()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        ) : (
+          <ChainlinkFeeds
+            account={account}
+            provider={provider}
+            signer={signer}
+            isConnected={isConnected}
+            currentNetwork={currentNetwork}
+          />
+        )}
       </div>
     </div>
   );

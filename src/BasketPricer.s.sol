@@ -9,9 +9,16 @@ library Decs {
 }
 
 interface IEtfFeedAggregator {
-    function getPrices(string[] calldata symbols)
-        external view
-        returns (int256[] memory prices, uint8[] memory decimals, uint256[] memory updatedAts);
+    function getPrices(
+        string[] calldata symbols
+    )
+        external
+        view
+        returns (
+            int256[] memory prices,
+            uint8[] memory decimals,
+            uint256[] memory updatedAts
+        );
 }
 
 // add requirement for weights to be positive
@@ -19,28 +26,31 @@ interface IEtfFeedAggregator {
 contract BasketPricer {
     using Decs for int256;
     IEtfFeedAggregator public immutable agg;
-    constructor(address _a) { agg = IEtfFeedAggregator(_a); }
 
-    function calculateWeightedBasketPrice(string[] calldata symbols, int256[] calldata w1e18)
-        public view
-        returns (int256 etfPrice)
-    {
+    constructor(address _a) {
+        agg = IEtfFeedAggregator(_a);
+    }
+
+    function calculateWeightedBasketPrice(
+        string[] calldata symbols,
+        int256[] calldata w1e18
+    ) public view returns (int256 etfPrice) {
         require(symbols.length == w1e18.length, "len mismatch");
         (int256[] memory p, uint8[] memory d, ) = agg.getPrices(symbols);
- 
+
         for (uint256 i; i < p.length; ++i) {
             require(w1e18[i] >= 0, "weight<0");
             int256 pi = p[i].to1e18(d[i]);
             etfPrice += (pi * w1e18[i]) / 1e18;
         }
 
-
+        return etfPrice;
     }
 
-    function boundsForBand(int256 etfPrice, uint16 bandBps)
-        public pure
-        returns (int256 lower1e18, int256 upper1e18)
-    {
+    function boundsForBand(
+        int256 etfPrice,
+        uint16 bandBps
+    ) public pure returns (int256 lower1e18, int256 upper1e18) {
         require(etfPrice > 0, "nav<=0");
         require(bandBps <= 10_000, "band>100%");
         int256 b = int256(uint256(bandBps));
@@ -52,15 +62,8 @@ contract BasketPricer {
         string[] calldata symbols,
         int256[] calldata w1e18,
         uint16 bandBps
-    )
-        external view
-        returns (
-            int256 etfPrice,
-            int256 lower,
-            int256 upper
-        )
-    {
-        etfPrice  = calculateWeightedBasketPrice(symbols, w1e18);
+    ) external view returns (int256 etfPrice, int256 lower, int256 upper) {
+        etfPrice = calculateWeightedBasketPrice(symbols, w1e18);
         (lower, upper) = boundsForBand(etfPrice, bandBps);
     }
 }
