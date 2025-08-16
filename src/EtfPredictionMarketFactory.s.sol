@@ -1,25 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import {EtfPredictionMarket}   from "./EtfPredictionMarket.s.sol";
-import {IBasketPricer}        from "../interfaces/IBasketPricer.sol";
-import {ClaimTokens}          from "./ClaimTokens.s.sol";
+import {EtfPredictionMarket}    from "./EtfPredictionMarket.s.sol";
+import {IBasketPricer}         from "../interfaces/IBasketPricer.sol";
+import {ClaimTokens}           from "./ClaimTokens.s.sol";
 import {PredictionMarketVault} from "./PredictionMarketVault.s.sol";
 
-// Deterministic ERC-1155 IDs from (market address, outcomeCode)
 library ClaimIds {
-    // outcome: 1 = WITHIN, 2 = OUTSIDE
     function id(address market, uint8 outcomeCode) internal pure returns (uint256) {
-        return (uint256(uint160(market)) << 8) | outcomeCode;
+        return (uint256(uint160(market)) << 8) | outcomeCode; // 1=WITHIN, 2=OUTSIDE
     }
 }
 
 contract EtfPredictionMarketFactory {
     using ClaimIds for address;
 
-    IBasketPricer public immutable pricer;      // pricing helper
-    ClaimTokens   public immutable claims;      // global ERC-1155
-    address       public immutable collateral;  // ERC-20 (e.g., USDC) used by vaults
+    IBasketPricer public immutable pricer;
+    ClaimTokens   public immutable claims;
+    address       public immutable collateral;
 
     mapping(address => address[]) public marketsByCreator;
     address[] public allMarkets;
@@ -44,9 +42,8 @@ contract EtfPredictionMarketFactory {
         collateral = _collateral;
     }
 
-    /// Create a prediction market + its dedicated vault, and authorize mint/burn.
-    /// @return mkt   Address of the deployed market
-    /// @return vault Address of the deployed per-market vault
+    // ------------------------------ PUBLIC ------------------------------
+
     function create(
         string[] calldata symbols,
         int256[] calldata w1e18,
@@ -57,20 +54,54 @@ contract EtfPredictionMarketFactory {
         require(settleTs > block.timestamp, "settle in past");
         require(symbols.length == w1e18.length, "len mismatch");
 
-        // 1) On-chain quote + bounds (locks what the UI previewed)
-        (int256 strike, int256 lower, int256 upper) = pricer.quoteAndBounds(symbols, w1e18, bandBps);
+        // Keep only 3 locals here
+        (int256 strike, int256 lower, int256 upper) =
+            pricer.quoteAndBounds(symbols, w1e18, bandBps);
         require(strike > 0, "bad strike");
         require(lower < strike && strike < upper, "bad bounds");
 
-        // 2) Deploy a dedicated vault for this market; factory is initial owner
-        PredictionMarketVault vaultContract = new PredictionMarketVault(collateral, address(this));
-        vault = address(vaultContract);
+        vault = _deployVault();
 
-        // 3) Deploy the market with references + locked params
+        // Heavy constructor arg list happens in its own frame
+        mkt = _deployMarket(
+            vault,
+            symbols,
+            w1e18,
+            strike,
+            lower,
+            upper,
+            bandBps,
+            settleTs
+        );
+
+        _wire(mkt, vault);
+        _bookkeep(mkt);
+        _emitCreated(mkt, vault, strike, lower, upper, bandBps, settleTs);
+    }
+
+    // ------------------------------ INTERNAL ------------------------------
+
+    function _deployVault() internal returns (address vault) {
+        PredictionMarketVault v = new PredictionMarketVault(collateral, address(this));
+        vault = address(v);
+    }
+
+    function _deployMarket(
+        address vault,
+        string[] calldata symbols,
+        int256[] calldata w1e18,
+        int256 strike,
+        int256 lower,
+        int256 upper,
+        uint16 bandBps,
+        uint64 settleTs
+    ) internal returns (address mkt) {
+        // Cast once inside this frame; reduces types in caller
+        PredictionMarketVault v = PredictionMarketVault(vault);
         EtfPredictionMarket market = new EtfPredictionMarket(
             pricer,
             claims,
-            vaultContract,
+            v,
             symbols,
             w1e18,
             strike,
@@ -80,27 +111,36 @@ contract EtfPredictionMarketFactory {
             settleTs
         );
         mkt = address(market);
+    }
 
-        // 4) Wire permissions
-        // NOTE: Factory must own ClaimTokens (OZ v5) or this will revert.
-        claims.setMinter(mkt, true);     // allow market to mint/burn its ERC-1155 outcomes
-        vaultContract.setMarket(mkt);    // allow market to move funds in its vault
-        // Optional: hand vault ownership to the market for tighter control:
-        // vaultContract.transferOwnership(mkt);
+    function _wire(address mkt, address vault) internal {
+        // All wiring in its own small frame
+        claims.setMinter(mkt, true);
+        PredictionMarketVault v = PredictionMarketVault(vault);
+        v.setMarket(mkt);
+        v.setClaims(address(claims));
+    }
 
-        // 5) Bookkeeping + emit IDs for the UI/indexers
+    function _bookkeep(address mkt) internal {
         marketsByCreator[msg.sender].push(mkt);
         allMarkets.push(mkt);
+    }
 
-        uint256 withinId  = mkt.id(1);
-        uint256 outsideId = mkt.id(2);
-
+    function _emitCreated(
+        address mkt,
+        address vault,
+        int256 strike,
+        int256 lower,
+        int256 upper,
+        uint16 bandBps,
+        uint64 settleTs
+    ) internal {
         emit MarketCreated(
             mkt,
             msg.sender,
             vault,
-            withinId,
-            outsideId,
+            mkt.id(1),
+            mkt.id(2),
             strike,
             lower,
             upper,
