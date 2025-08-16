@@ -1,66 +1,170 @@
-## Foundry
+# Mini ETF CLOB Trading System
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A Central Limit Order Book (CLOB) trading system for binary markets with separate YES and NO order books.
 
-Foundry consists of:
+## Project Structure
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- `clob/` - Rust backend with the CLOB implementation
+- `src/` - Solidity smart contracts
+- `frontend/` - React-based trading interface with wallet integration
+- `backend/` - Node.js API service
 
-## Documentation
+## Backend (Rust CLOB)
 
-https://book.getfoundry.sh/
+The Rust implementation provides:
 
-## Usage
+- Separate order books for YES and NO markets
+- Order matching engine
+- Price-time priority matching
+- Support for binary market arbitrage
 
-### Build
+### Running the Backend
 
-```shell
-$ forge build
+```bash
+cd clob
+cargo test  # Run tests
+cargo build # Build the library
 ```
 
-### Test
+## Frontend
 
-```shell
-$ forge test
+A modern React-based trading interface with:
+
+- MetaMask wallet integration
+- Real-time order book display
+- Order placement and cancellation
+- Trade history
+- Arbitrage opportunity monitoring
+
+### Running the Frontend
+
+1. Install dependencies:
+
+```bash
+cd frontend
+npm install
 ```
 
-### Format
+2. Start the development server:
 
-```shell
-$ forge fmt
+```bash
+npm start
 ```
 
-### Gas Snapshots
+3. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-```shell
-$ forge snapshot
+4. Connect your MetaMask wallet to interact with the trading interface
+
+## Backend API
+
+A Node.js/Express API service that:
+
+- Provides RESTful endpoints for the trading system
+- Manages orders, markets, and trades
+- Integrates with the Rust CLOB engine
+- Handles wallet authentication and order validation
+
+### Running the Backend API
+
+1. Install dependencies:
+
+```bash
+cd backend
+npm install
 ```
 
-### Anvil
+2. Start the API server:
 
-```shell
-$ anvil
+```bash
+npm start
 ```
 
-### Deploy
+The API will be available at `http://localhost:3001`
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+## Quick Start
+
+Use the automated startup script:
+
+```bash
+./start.sh
 ```
 
-### Cast
+This will start both the frontend and backend services automatically.
 
-```shell
-$ cast <subcommand>
+### Features
+
+- **Wallet Integration**: Connect MetaMask or other Web3 wallets
+- **Dual Markets**: Separate trading interfaces for YES and NO markets
+- **Order Management**: Place, view, and cancel orders
+- **Real-time Updates**: Live order book and trade updates
+- **Arbitrage Monitoring**: Automatic detection of arbitrage opportunities
+- **Responsive Design**: Works on desktop and mobile devices
+
+### Trading Interface
+
+The interface displays:
+
+- **YES Market**: Buy and sell YES shares
+- **NO Market**: Buy and sell NO shares
+- **Order Books**: Real-time bid/ask prices and quantities
+- **Recent Trades**: History of executed trades
+- **Arbitrage Monitor**: YES + NO price relationship tracking
+
+### Arbitrage
+
+The system automatically monitors for arbitrage opportunities where:
+
+- YES price + NO price < 1.0 (arbitrage opportunity)
+- YES price + NO price = 1.0 (efficient pricing)
+- YES price + NO price > 1.0 (inefficient pricing)
+
+## Smart Contracts
+
+The Solidity contracts provide:
+
+- Market creation and management
+- Order execution and settlement
+- Collateral management
+- Oracle price feeds
+
+## Development
+
+### Prerequisites
+
+- Rust (for backend)
+- Node.js 16+ (for frontend and API)
+- MetaMask browser extension
+- Foundry (for smart contract development)
+
+### Testing
+
+```bash
+# Backend tests
+cd clob && cargo test
+
+# Frontend tests
+cd frontend && npm test
+
+# Backend API tests
+cd backend && npm test
+
+# Smart contract tests
+forge test
 ```
 
-### Help
+## Architecture
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+The system uses a microservices architecture:
+
+- **Frontend**: React SPA with Web3 integration
+- **Backend API**: Node.js/Express service layer
+- **Backend**: Rust CLOB engine
+- **Smart Contracts**: Ethereum-based settlement layer
+- **Order Books**: Separate YES/NO markets with price-time priority
+
+This design ensures:
+
+- High performance order matching
+- Clear separation of concerns
+- Scalable market structure
+- Efficient arbitrage detection
