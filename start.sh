@@ -22,24 +22,19 @@ fi
 
 echo "✅ Prerequisites check passed"
 
-# Install frontend dependencies
-echo "📦 Installing frontend dependencies..."
-cd frontend
-npm install
-
-# Install backend dependencies
-echo "📦 Installing backend dependencies..."
-cd ../backend
-npm install
-
-# Build Rust backend
-echo "🔨 Building Rust CLOB backend..."
-cd ../clob
-cargo build
+# Check if system has been built
+if [ ! -f "clob/target/release/libclob.dylib" ] && [ ! -f "clob/target/release/libclob.so" ] && [ ! -f "clob/target/release/clob.dll" ]; then
+    echo "⚠️  Rust CLOB library not found. Building system..."
+    ./build.sh
+    if [ $? -ne 0 ]; then
+        echo "❌ Build failed. Please run ./build.sh manually to fix issues."
+        exit 1
+    fi
+fi
 
 # Start backend server
 echo "🚀 Starting backend API server..."
-cd ../backend
+cd backend
 npm start &
 BACKEND_PID=$!
 
@@ -50,6 +45,14 @@ sleep 5
 # Check if backend is running
 if curl -s http://localhost:3001/health > /dev/null; then
     echo "✅ Backend is running on http://localhost:3001"
+    
+    # Check which CLOB engine is being used
+    ENGINE_INFO=$(curl -s http://localhost:3001/health | grep -o '"clobEngine":"[^"]*"' | cut -d'"' -f4)
+    if [ "$ENGINE_INFO" = "Rust" ]; then
+        echo "🚀 Using Rust CLOB engine"
+    else
+        echo "⚠️  Using JavaScript fallback engine"
+    fi
 else
     echo "❌ Backend failed to start"
     kill $BACKEND_PID 2>/dev/null

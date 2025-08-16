@@ -1,0 +1,1 @@
+cmd_Release/clob_binding.node := c++ -bundle -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=10.7 -arch arm64 -L./Release -stdlib=libc++  -o Release/clob_binding.node Release/obj.target/clob_binding/src/clob_binding.o Release/nothing.a -L/Users/raymeind/mini-etf/clob/target/release -lclob
