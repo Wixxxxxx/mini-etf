@@ -2,12 +2,12 @@
 pragma solidity ^0.8.13;
 
 import { IBasketPricer } from "../interfaces/IBasketPricer.sol";
-import { ClaimTokens } from "./ClaimTokens.sol";
-import {PredictionMarketVault} from "./PredictionMarketVault.sol";
+import { ClaimTokens } from "./ClaimTokens.s.sol";
+import {PredictionMarketVault} from "./PredictionMarketVault.s.sol";
 
 
 contract EtfPredictionMarket {
-    enum Outcome { Within, Outside, Unset }
+    enum Outcome { Unset, Within, Outside }
 
     IBasketPricer public immutable pricer;
     ClaimTokens   public immutable claims;
