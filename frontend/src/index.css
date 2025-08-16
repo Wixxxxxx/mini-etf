@@ -78,11 +78,117 @@ code {
   font-family: monospace;
 }
 
-.trading-section {
+/* Wallet Options */
+.wallet-options {
+  margin-top: 15px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  max-width: 600px;
+}
+
+.wallet-option {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 15px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.wallet-option:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
+}
+
+.wallet-option:active {
+  transform: translateY(0);
+}
+
+.wallet-icon {
+  font-size: 20px;
+}
+
+.no-wallets-message {
+  text-align: center;
+  padding: 20px;
+  color: #cccccc;
+}
+
+.no-wallets-message p {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+}
+
+.wallet-install-links {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.wallet-link {
+  color: #667eea;
+  text-decoration: none;
+  padding: 8px 16px;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.wallet-link:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* Market Tabs */
+.market-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
   margin-bottom: 30px;
+}
+
+.market-tab {
+  background: rgba(255, 255, 255, 0.1);
+  color: #cccccc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 15px 30px;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.market-tab:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.market-tab.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #667eea;
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+/* Trading Section - Single Market */
+.trading-section-single {
+  max-width: 800px;
+  margin: 0 auto 30px auto;
 }
 
 .market-card {
@@ -97,12 +203,14 @@ code {
   margin: 0 0 20px 0;
   font-size: 1.5rem;
   color: #667eea;
+  text-align: center;
 }
 
 .order-form {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  margin-bottom: 25px;
 }
 
 .form-group {
@@ -159,12 +267,14 @@ code {
 .order-book h4 {
   margin: 0 0 15px 0;
   color: #cccccc;
+  text-align: center;
 }
 
 .order-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  align-items: center;
+  padding: 10px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -186,12 +296,14 @@ code {
   border-radius: 15px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  margin-bottom: 30px;
 }
 
 .trades-section h3 {
   margin: 0 0 20px 0;
   font-size: 1.5rem;
   color: #667eea;
+  text-align: center;
 }
 
 .trade-row {
@@ -205,12 +317,82 @@ code {
   border-bottom: none;
 }
 
+/* Responsive Design */
 @media (max-width: 768px) {
-  .trading-section {
-    grid-template-columns: 1fr;
+  .container {
+    padding: 15px;
   }
   
   .header h1 {
     font-size: 2rem;
+  }
+  
+  .wallet-options {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+  
+  .wallet-option {
+    padding: 12px;
+    font-size: 14px;
+  }
+  
+  .market-tabs {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .market-tab {
+    width: 100%;
+    max-width: 300px;
+    text-align: center;
+  }
+  
+  .trading-section-single {
+    max-width: 100%;
+  }
+  
+  .market-card {
+    padding: 20px;
+  }
+  
+  .order-form {
+    gap: 12px;
+  }
+  
+  .form-group input, .form-group select {
+    padding: 10px;
+    font-size: 14px;
+  }
+  
+  .submit-button {
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .market-card {
+    padding: 15px;
+  }
+  
+  .order-book {
+    padding: 10px;
+  }
+  
+  .order-row {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .trade-row {
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-start;
   }
 } 

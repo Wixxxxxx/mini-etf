@@ -7,8 +7,11 @@ function App() {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [showWalletOptions, setShowWalletOptions] = useState(false);
   const [orders, setOrders] = useState([]);
   const [trades, setTrades] = useState([]);
+  const [activeMarket, setActiveMarket] = useState('YES'); // Track active market tab
+  const [availableWallets, setAvailableWallets] = useState([]);
   const [orderForm, setOrderForm] = useState({
     market: 'YES',
     side: 'Buy',
@@ -17,10 +20,76 @@ function App() {
     marketId: 'test_market'
   });
 
-  // Connect wallet
-  const connectWallet = async () => {
+  // Detect available wallets on component mount
+  useEffect(() => {
+    detectAvailableWallets();
+  }, []);
+
+  // Function to detect which wallets are available
+  const detectAvailableWallets = () => {
+    const wallets = [];
+    
+    if (typeof window.ethereum !== 'undefined') {
+      if (window.ethereum.isMetaMask) {
+        wallets.push({ id: 'metamask', name: 'MetaMask', icon: '🦊', connect: connectMetaMask });
+      }
+      if (window.ethereum.isCoinbaseWallet) {
+        wallets.push({ id: 'coinbase', name: 'Coinbase Wallet', icon: '🪙', connect: connectCoinbaseWallet });
+      }
+      if (window.ethereum.isTrust) {
+        wallets.push({ id: 'trust', name: 'Trust Wallet', icon: '🛡️', connect: connectInjectedWallet });
+      }
+      if (window.ethereum.isTokenPocket) {
+        wallets.push({ id: 'tokenpocket', name: 'TokenPocket', icon: '💼', connect: connectInjectedWallet });
+      }
+      
+      // If no specific wallet is detected but ethereum is available, add generic option
+      if (wallets.length === 0) {
+        wallets.push({ id: 'generic', name: 'Injected Wallet', icon: '💼', connect: connectInjectedWallet });
+      }
+    }
+    
+    setAvailableWallets(wallets);
+  };
+
+  // Connect to MetaMask
+  const connectMetaMask = async () => {
     try {
       if (typeof window.ethereum !== 'undefined') {
+        // Check if it's actually MetaMask, not Coinbase Wallet
+        if (window.ethereum.isMetaMask && !window.ethereum.isCoinbaseWallet) {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const accounts = await provider.send("eth_requestAccounts", []);
+          const signer = await provider.getSigner();
+          
+          setProvider(provider);
+          setSigner(signer);
+          setAccount(accounts[0]);
+          setIsConnected(true);
+          setShowWalletOptions(false);
+          
+          // Listen for account changes
+          window.ethereum.on('accountsChanged', (accounts) => {
+            setAccount(accounts[0]);
+          });
+        } else if (window.ethereum.isCoinbaseWallet) {
+          alert('Coinbase Wallet detected instead of MetaMask. Please use the Coinbase Wallet option or disable Coinbase Wallet extension.');
+        } else {
+          alert('MetaMask not detected. Please install MetaMask or ensure it\'s enabled.');
+        }
+      } else {
+        alert('MetaMask is not installed. Please install MetaMask first!');
+      }
+    } catch (error) {
+      console.error('Error connecting to MetaMask:', error);
+      alert('Failed to connect to MetaMask');
+    }
+  };
+
+  // Connect to Coinbase Wallet
+  const connectCoinbaseWallet = async () => {
+    try {
+      if (typeof window.ethereum !== 'undefined' && window.ethereum.isCoinbaseWallet) {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.send("eth_requestAccounts", []);
         const signer = await provider.getSigner();
@@ -29,17 +98,49 @@ function App() {
         setSigner(signer);
         setAccount(accounts[0]);
         setIsConnected(true);
+        setShowWalletOptions(false);
+      } else {
+        alert('Coinbase Wallet is not installed. Please install Coinbase Wallet first!');
+      }
+    } catch (error) {
+      console.error('Error connecting to Coinbase Wallet:', error);
+      alert('Failed to connect to Coinbase Wallet');
+    }
+  };
+
+  // Connect to any injected wallet
+  const connectInjectedWallet = async () => {
+    try {
+      if (typeof window.ethereum !== 'undefined') {
+        // Determine which wallet is actually injected
+        let walletName = 'Unknown Wallet';
+        if (window.ethereum.isMetaMask) walletName = 'MetaMask';
+        else if (window.ethereum.isCoinbaseWallet) walletName = 'Coinbase Wallet';
+        else if (window.ethereum.isTrust) walletName = 'Trust Wallet';
+        else if (window.ethereum.isTokenPocket) walletName = 'TokenPocket';
+        
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send("eth_requestAccounts", []);
+        const signer = await provider.getSigner();
+        
+        setProvider(provider);
+        setSigner(signer);
+        setAccount(accounts[0]);
+        setIsConnected(true);
+        setShowWalletOptions(false);
         
         // Listen for account changes
         window.ethereum.on('accountsChanged', (accounts) => {
           setAccount(accounts[0]);
         });
+        
+        console.log(`Connected to ${walletName}`);
       } else {
-        alert('Please install MetaMask!');
+        alert('No injected wallet found. Please install a Web3 wallet first!');
       }
     } catch (error) {
-      console.error('Error connecting wallet:', error);
-      alert('Failed to connect wallet');
+      console.error('Error connecting to injected wallet:', error);
+      alert('Failed to connect to wallet');
     }
   };
 
@@ -49,6 +150,16 @@ function App() {
     setProvider(null);
     setSigner(null);
     setIsConnected(false);
+    setShowWalletOptions(false);
+  };
+
+  // Handle market tab change
+  const handleMarketChange = (market) => {
+    setActiveMarket(market);
+    setOrderForm(prev => ({
+      ...prev,
+      market: market
+    }));
   };
 
   // Handle form input changes
@@ -75,10 +186,10 @@ function App() {
     }
 
     const price = parseFloat(orderForm.price);
-    const quantity = parseFloat(orderForm.quantity);
+    const quantity = parseInt(orderForm.quantity);
 
-    if (price < 0 || price > 1 || quantity <= 0) {
-      alert('Invalid price or quantity');
+    if (price < 0 || price > 1 || quantity <= 0 || !Number.isInteger(quantity)) {
+      alert('Invalid price or quantity. Price must be between 0 and 1, quantity must be a positive integer.');
       return;
     }
 
@@ -129,7 +240,7 @@ function App() {
 
       // Reset form
       setOrderForm({
-        market: 'YES',
+        market: activeMarket,
         side: 'Buy',
         price: '',
         quantity: '',
@@ -177,9 +288,40 @@ function App() {
         <div className="wallet-section">
           <h2>Wallet Connection</h2>
           {!isConnected ? (
-            <button className="wallet-button" onClick={connectWallet}>
-              Connect Wallet
-            </button>
+            <div>
+              <button className="wallet-button" onClick={() => setShowWalletOptions(!showWalletOptions)}>
+                Connect Wallet
+              </button>
+              
+              {showWalletOptions && (
+                <div className="wallet-options">
+                  {availableWallets.length > 0 ? (
+                    availableWallets.map(wallet => (
+                      <button 
+                        key={wallet.id} 
+                        className="wallet-option" 
+                        onClick={wallet.connect}
+                      >
+                        <span className="wallet-icon">{wallet.icon}</span>
+                        {wallet.name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="no-wallets-message">
+                      <p>No wallets detected. Please install a Web3 wallet extension.</p>
+                      <div className="wallet-install-links">
+                        <a href="https://metamask.io/" target="_blank" rel="noopener noreferrer" className="wallet-link">
+                          🦊 Install MetaMask
+                        </a>
+                        <a href="https://wallet.coinbase.com/" target="_blank" rel="noopener noreferrer" className="wallet-link">
+                          🪙 Install Coinbase Wallet
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             <div>
               <button className="wallet-button" onClick={disconnectWallet}>
@@ -192,13 +334,28 @@ function App() {
           )}
         </div>
 
-        {/* Trading Section */}
-        <div className="trading-section">
-          {/* YES Market */}
+        {/* Market Selection Tabs */}
+        <div className="market-tabs">
+          <button 
+            className={`market-tab ${activeMarket === 'YES' ? 'active' : ''}`}
+            onClick={() => handleMarketChange('YES')}
+          >
+            YES Market
+          </button>
+          <button 
+            className={`market-tab ${activeMarket === 'NO' ? 'active' : ''}`}
+            onClick={() => handleMarketChange('NO')}
+          >
+            NO Market
+          </button>
+        </div>
+
+        {/* Trading Section - Single Market */}
+        <div className="trading-section-single">
           <div className="market-card">
-            <h3>YES Market</h3>
+            <h3>{activeMarket} Market</h3>
             <form className="order-form" onSubmit={placeOrder}>
-              <input type="hidden" name="market" value="YES" />
+              <input type="hidden" name="market" value={activeMarket} />
               
               <div className="form-group">
                 <label>Side:</label>
@@ -223,14 +380,14 @@ function App() {
               </div>
 
               <div className="form-group">
-                <label>Quantity:</label>
+                <label>Quantity (whole shares):</label>
                 <input
                   type="number"
                   name="quantity"
                   value={orderForm.quantity}
                   onChange={handleInputChange}
-                  step="0.01"
-                  min="0.01"
+                  step="1"
+                  min="1"
                   required
                 />
               </div>
@@ -240,19 +397,19 @@ function App() {
               </button>
             </form>
 
-            {/* YES Market Order Book */}
+            {/* Order Book for Active Market */}
             <div className="order-book">
               <h4>Order Book</h4>
               {(() => {
-                const yesOrders = getOrderBook('YES');
-                const { bestBid, bestAsk } = getBestPrices('YES');
+                const marketOrders = getOrderBook(activeMarket);
+                const { bestBid, bestAsk } = getBestPrices(activeMarket);
                 return (
                   <div>
                     <div className="order-row">
                       <span>Best Bid: <span className="bid">{bestBid.toFixed(3)}</span></span>
                       <span>Best Ask: <span className="ask">{bestAsk.toFixed(3)}</span></span>
                     </div>
-                    {yesOrders.slice(0, 5).map(order => (
+                    {marketOrders.slice(0, 10).map(order => (
                       <div key={order.id} className="order-row">
                         <span className={order.side === 'Buy' ? 'bid' : 'ask'}>
                           {order.side} {order.qty} @ {order.price.toFixed(3)}
@@ -265,83 +422,11 @@ function App() {
                         </button>
                       </div>
                     ))}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* NO Market */}
-          <div className="market-card">
-            <h3>NO Market</h3>
-            <form className="order-form" onSubmit={placeOrder}>
-              <input type="hidden" name="market" value="NO" />
-              
-              <div className="form-group">
-                <label>Side:</label>
-                <select name="side" value={orderForm.side} onChange={handleInputChange}>
-                  <option value="Buy">Buy</option>
-                  <option value="Sell">Sell</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Price (0.0 - 1.0):</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={orderForm.price}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  max="1"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Quantity:</label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={orderForm.quantity}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0.01"
-                  required
-                />
-              </div>
-
-              <button type="submit" className="submit-button" disabled={!isConnected}>
-                Place Order
-              </button>
-            </form>
-
-            {/* NO Market Order Book */}
-            <div className="order-book">
-              <h4>Order Book</h4>
-              {(() => {
-                const noOrders = getOrderBook('NO');
-                const { bestBid, bestAsk } = getBestPrices('NO');
-                return (
-                  <div>
-                    <div className="order-row">
-                      <span>Best Bid: <span className="bid">{bestBid.toFixed(3)}</span></span>
-                      <span>Best Ask: <span className="ask">{bestAsk.toFixed(3)}</span></span>
-                    </div>
-                    {noOrders.slice(0, 5).map(order => (
-                      <div key={order.id} className="order-row">
-                        <span className={order.side === 'Buy' ? 'bid' : 'ask'}>
-                          {order.side} {order.qty} @ {order.price.toFixed(3)}
-                        </span>
-                        <button 
-                          onClick={() => cancelOrder(order.id)}
-                          style={{background: '#f44336', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'}}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ))}
+                    {marketOrders.length === 0 && (
+                      <p style={{textAlign: 'center', color: '#888', fontStyle: 'italic'}}>
+                        No orders in this market yet
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -364,31 +449,6 @@ function App() {
               </div>
             ))
           )}
-        </div>
-
-        {/* Arbitrage Opportunity */}
-        <div className="trades-section">
-          <h3>Arbitrage Monitor</h3>
-          {(() => {
-            const yesPrices = getBestPrices('YES');
-            const noPrices = getBestPrices('NO');
-            const yesNoSum = yesPrices.bestBid + noPrices.bestBid;
-            const arbitrageOpportunity = yesNoSum < 1.0;
-            
-            return (
-              <div>
-                <p><strong>YES + NO = {yesNoSum.toFixed(3)}</strong></p>
-                {arbitrageOpportunity ? (
-                  <p style={{color: '#4CAF50', fontWeight: 'bold'}}>
-                    🎯 Arbitrage Opportunity! Buy YES at {yesPrices.bestBid.toFixed(3)} and NO at {noPrices.bestBid.toFixed(3)} 
-                    for a total of {yesNoSum.toFixed(3)} (guaranteed profit of {(1.0 - yesNoSum).toFixed(3)})
-                  </p>
-                ) : (
-                  <p>No arbitrage opportunity currently</p>
-                )}
-              </div>
-            );
-          })()}
         </div>
       </div>
     </div>
