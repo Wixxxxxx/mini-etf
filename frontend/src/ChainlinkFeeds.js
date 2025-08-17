@@ -41,8 +41,8 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
 
   // Your deployed contract addresses
   const CONTRACT_ADDRESSES = {
-    basketPricer: '0x9be9Edb609F164088141642ac14437672FbA47b2',
-    feedAggregator: '0x947C3c632BDea7511aB8fDb419592993F80992dd',
+    basketPricer: '0xFfc7B12479ab107Ce0D7A3efbd505D18A5001FF1',
+    feedAggregator: '0x3BE15977b7653eC1EBa462bdB1ef30Bdc3267E74',
     predictionMarketFactory: '0x29d1eBDa71C3d2B62CA2b6F275B1658077bB09DD',
     claimTokens: '0x31d1e2d63169cC9e9910DDe53c62097bB5eE01Da',
     collateral: '0x0000000000000000000000000000000000000000' // TODO: Add your USDC/collateral address
@@ -55,7 +55,8 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
   const basketPricerABI = [
     "function calculateWeightedBasketPrice(string[] calldata symbols, int256[] calldata w1e18) external view returns (int256 etfPrice)",
     "function boundsForBand(int256 etfPrice, uint16 bandBps) external pure returns (int256 lower1e18, int256 upper1e18)",
-    "function quoteAndBounds(string[] calldata symbols, int256[] calldata w1e18, uint16 bandBps) external view returns (int256 etfPrice, int256 lower, int256 upper)"
+    "function quoteAndBounds(string[] calldata symbols, int256[] calldata w1e18, uint16 bandBps) external view returns (int256 etfPrice, int256 lower, int256 upper)",
+    "function agg() external view returns (address)"
   ];
 
   const feedAggregatorABI = [
@@ -464,43 +465,73 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
       console.log('Transaction confirmed:', receipt.hash);
       
       // Parse the MarketCreated event
+      console.log('Looking for MarketCreated event in receipt logs...');
+      console.log('Receipt logs:', receipt.logs);
+      
       const event = receipt.logs.find(log => {
         try {
           const parsed = factory.interface.parseLog(log);
+          console.log('Parsed log:', parsed);
           return parsed.name === 'MarketCreated';
-        } catch {
+        } catch (parseError) {
+          console.log('Could not parse log:', parseError);
           return false;
         }
       });
       
       if (!event) {
+        console.error('MarketCreated event not found in transaction receipt');
+        console.error('Available logs:', receipt.logs.map(log => {
+          try {
+            return factory.interface.parseLog(log);
+          } catch {
+            return 'Unparseable log';
+          }
+        }));
         throw new Error('MarketCreated event not found in transaction receipt');
       }
       
+      console.log('Found MarketCreated event:', event);
       const parsedEvent = factory.interface.parseLog(event);
-      const { market, vault, withinId, outsideId, strike, lower, upper } = parsedEvent.args;
+      console.log('Parsed event args:', parsedEvent.args);
+      
+      // Access args by index since they're not named properties
+      const market = parsedEvent.args[0];
+      const creator = parsedEvent.args[1];
+      const vault = parsedEvent.args[2];
+      const withinId = parsedEvent.args[3];
+      const outsideId = parsedEvent.args[4];
+      const strike = parsedEvent.args[5];
+      const lower = parsedEvent.args[6];
+      const upper = parsedEvent.args[7];
+      const eventBandBps = parsedEvent.args[8];
+      const eventSettleTs = parsedEvent.args[9];
       
       console.log('Market created successfully:', {
         market: market.toString(),
-        vault: vault.toString(),
-        withinId: withinId.toString(),
-        outsideId: outsideId.toString(),
-        strike: strike.toString(),
-        lower: lower.toString(),
-        upper: upper.toString()
-      });
-      
-      // Return the real market data
-      return {
-        market: market.toString(),
+        creator: creator.toString(),
         vault: vault.toString(),
         withinId: withinId.toString(),
         outsideId: outsideId.toString(),
         strike: strike.toString(),
         lower: lower.toString(),
         upper: upper.toString(),
-        bandBps: bandBps,
-        settleTs: settleTs
+        bandBps: eventBandBps.toString(),
+        settleTs: eventSettleTs.toString()
+      });
+      
+      // Return the real market data
+      return {
+        market: market.toString(),
+        creator: creator.toString(),
+        vault: vault.toString(),
+        withinId: withinId.toString(),
+        outsideId: outsideId.toString(),
+        strike: strike.toString(),
+        lower: lower.toString(),
+        upper: upper.toString(),
+        bandBps: eventBandBps.toString(),
+        settleTs: eventSettleTs.toString()
       };
     } catch (error) {
       console.error('=== ERROR IN createPredictionMarket ===');
@@ -1312,6 +1343,46 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
                 }
                 
                 try {
+                  console.log('Testing FeedAggregator with new symbol format...');
+                  
+                  // Test the FeedAggregator directly with the original symbol format
+                  const symbols = ['ETH', 'BTC', 'LINK'];
+                  console.log('Testing with symbols:', symbols);
+                  
+                  const contractPrices = await getContractPrices(symbols);
+                  console.log('FeedAggregator test result:', contractPrices);
+                  
+                  if (contractPrices) {
+                    // Convert string values back to numbers for formatting
+                    const prices = contractPrices.prices.map((p, i) => {
+                      const price = ethers.formatUnits(p, parseInt(contractPrices.decimals[i]));
+                      const updatedAt = new Date(parseInt(contractPrices.updatedAts[i]) * 1000).toLocaleString();
+                      return { symbol: symbols[i], price, updatedAt };
+                    });
+                    
+                    const resultText = prices.map(p => `${p.symbol}: ${p.price} (${p.updatedAt})`).join('\n');
+                    alert(`FeedAggregator Test (New Format):\n\n${resultText}`);
+                  } else {
+                    alert('FeedAggregator test failed. Check console for details.');
+                  }
+                } catch (error) {
+                  console.error('FeedAggregator test failed:', error);
+                  alert(`FeedAggregator test failed: ${error.message}\n\nCheck console for detailed error information.`);
+                }
+              }}
+            >
+              🧪 Test FeedAggregator (Original Format)
+            </button>
+            
+            <button 
+              className="test-button"
+              onClick={async () => {
+                if (!provider || !isConnected) {
+                  alert('Please connect your wallet first');
+                  return;
+                }
+                
+                try {
                   console.log('Checking registered feeds in FeedAggregator...');
                   console.log('Contract address:', CONTRACT_ADDRESSES.feedAggregator);
                   console.log('Provider network:', await provider.getNetwork());
@@ -1365,6 +1436,73 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
               }}
             >
               📋 Check Feed Status
+            </button>
+            <button 
+              className="test-button"
+              onClick={async () => {
+                if (!provider || !isConnected) {
+                  alert('Please connect your wallet first');
+                  return;
+                }
+                
+                try {
+                  console.log('Checking what FeedAggregator BasketPricer is using...');
+                  
+                  // Check what FeedAggregator the BasketPricer is configured to use
+                  const basketPricerContract = new ethers.Contract(CONTRACT_ADDRESSES.basketPricer, basketPricerABI, provider);
+                  
+                  // Try to get the agg address
+                  console.log('BasketPricer address:', CONTRACT_ADDRESSES.basketPricer);
+                  
+                  try {
+                    const aggAddress = await basketPricerContract.agg();
+                    console.log('BasketPricer is configured to use FeedAggregator at:', aggAddress);
+                    console.log('This is different from the one in CONTRACT_ADDRESSES.feedAggregator:', CONTRACT_ADDRESSES.feedAggregator);
+                    
+                    if (aggAddress.toLowerCase() !== CONTRACT_ADDRESSES.feedAggregator.toLowerCase()) {
+                      alert(`Found the issue! BasketPricer is configured to use FeedAggregator at:\n\n${aggAddress}\n\nBut your frontend is trying to use:\n\n${CONTRACT_ADDRESSES.feedAggregator}\n\nYou need to either:\n1. Set up feed mappings in ${aggAddress}, OR\n2. Update CONTRACT_ADDRESSES.feedAggregator to ${aggAddress}`);
+                      return;
+                    }
+                  } catch (error) {
+                    console.log('Could not read agg address:', error.message);
+                  }
+                  
+                  // Test with a simple call to see what happens
+                  const testSymbols = ['ETH'];
+                  const testWeights = [ethers.parseUnits('1', 18)];
+                  
+                  console.log('Testing BasketPricer with:', { testSymbols, testWeights: testWeights.map(w => w.toString()) });
+                  
+                  try {
+                    const result = await basketPricerContract.quoteAndBounds(testSymbols, testWeights, 500);
+                    console.log('BasketPricer call succeeded:', result);
+                    alert('BasketPricer is working! It can successfully call its configured FeedAggregator.');
+                  } catch (error) {
+                    console.log('BasketPricer call failed:', error.message);
+                    
+                    // Try to decode the error to see if it's from FeedAggregator
+                    if (error.data && error.data !== '0x') {
+                      try {
+                        const iface = new ethers.Interface(feedAggregatorABI);
+                        const decodedError = iface.parseError(error.data);
+                        console.log('Decoded error from BasketPricer:', decodedError);
+                        
+                        if (decodedError && decodedError.name === 'UnknownFeed') {
+                          alert(`BasketPricer is calling a FeedAggregator that doesn't have the feed mappings set up.\n\nYou need to either:\n1. Set up feed mappings in the FeedAggregator that BasketPricer is using, OR\n2. Deploy a new BasketPricer that points to the FeedAggregator where you already have mappings.\n\nError: ${decodedError.args[0]}`);
+                        }
+                      } catch (decodeError) {
+                        console.error('Could not decode error:', decodeError);
+                      }
+                    }
+                  }
+                  
+                } catch (error) {
+                  console.error('BasketPricer check failed:', error);
+                  alert(`BasketPricer check failed: ${error.message}\n\nCheck console for detailed error information.`);
+                }
+              }}
+            >
+              🔍 Check BasketPricer's FeedAggregator
             </button>
           </div>
         </div>
@@ -1552,7 +1690,7 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
                     <div className="param-group">
                       <label>Symbols Array:</label>
                       <code className="param-value">
-                        {JSON.stringify(selectedFeeds.map(f => f.name.split('/')[0]))}
+                        {JSON.stringify(selectedFeeds.map(f => f.name))}
                       </code>
                     </div>
                     
@@ -1576,7 +1714,7 @@ function ChainlinkFeeds({ account, provider, signer, isConnected, currentNetwork
                       className="copy-params-button"
                       onClick={() => {
                         const params = {
-                          symbols: selectedFeeds.map(f => f.name.split('/')[0]),
+                          symbols: selectedFeeds.map(f => f.name),
                           weights: selectedFeeds.map(f => Math.floor((f.weight || (1 / selectedFeeds.length)) * 1e18)),
                           addresses: selectedFeeds.map(f => f.address),
                           basketPrice: basketPrice,
